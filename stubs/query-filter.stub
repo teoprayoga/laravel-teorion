@@ -1,0 +1,65 @@
+<?php
+
+namespace {{ namespace }};
+
+use Teoprayoga\Teorion\Filters\Filter;
+use Teoprayoga\Teorion\QueryFilter;
+
+class {{ class }} extends QueryFilter
+{
+    /**
+     * Default sort applied when client does not provide one.
+     * Spatie-style: prefix '-' for desc.
+     */
+    protected array $defaultSort = ['-created_at'];
+
+    public function filters(): array
+    {
+        return [
+            // 'search'      => Filter::multiLike(['name', 'description']),
+            // 'status'      => Filter::enum('status', StatusEnum::class),
+            // 'is_active'   => Filter::boolean()->default(true),
+            // 'verified_at' => Filter::null('verified_at'),
+            // 'created_at'  => Filter::dateRange('created_at', 'start_date', 'end_date'),
+            // 'view_count'  => Filter::range('view_count'), // expects view_count_min, view_count_max
+        ];
+    }
+
+    public function allowedScopes(): array
+    {
+        return [
+            // 'published',
+            // 'forStudent',
+        ];
+    }
+
+    public function allowedWiths(): array
+    {
+        return [
+            // 'relation',
+            // 'relation.nested',
+        ];
+    }
+
+    public function allowedWithCounts(): array
+    {
+        return [
+            // 'relation',
+        ];
+    }
+
+    public function allowedSorts(): array
+    {
+        return [
+            // 'created_at',
+            // 'name',
+        ];
+    }
+
+    public function allowedAggregates(): array
+    {
+        return [
+            // 'relation' => ['count' => true, 'sum' => ['column1'], 'avg' => ['column1']],
+        ];
+    }
+}
