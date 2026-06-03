@@ -2,6 +2,7 @@
 
 namespace Teoprayoga\Teorion\Tests\Unit\Terminal;
 
+use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -25,6 +26,22 @@ class PaginationTerminalTest extends TestCase
         $this->assertInstanceOf(LengthAwarePaginator::class, $result);
         $this->assertSame(2, $result->perPage());
         $this->assertSame(5, $result->total());
+    }
+
+    public function test_returns_cursor_paginator_when_pagination_mode_is_cursor(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            Post::create(['uuid' => "u-$i", 'title' => "P$i"]);
+        }
+
+        $terminal = new PaginationTerminal();
+        $request  = Request::create('/', 'GET', ['pagination' => 'cursor', 'per_page' => '2']);
+
+        $result = $terminal->execute(Post::query()->orderBy('id'), $request);
+
+        $this->assertInstanceOf(CursorPaginator::class, $result);
+        $this->assertSame(2, $result->perPage());
+        $this->assertCount(2, $result->items());
     }
 
     public function test_returns_collection_when_is_paginate_false(): void

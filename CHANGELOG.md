@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-06-03
+
+### Added
+
+#### Cursor Pagination
+- `PaginationTerminal` supports `cursorPaginate()` via request `?pagination=cursor`
+- New method: `PaginationTerminal::resolveMode(Request)` returns `'cursor'|'paginate'|'collection'`
+- New method: `PaginationTerminal::resolveLimit(Request)` extracts per-page/max-results value
+- New config keys: `pagination_mode_key`, `cursor_pagination_value`, `cursor_name`
+- `Filterable::scopeFilterAndPaginate()` return type widened to `LengthAwarePaginator|CursorPaginator|Collection`
+
+#### Query Audit & Fingerprint
+- `Teoprayoga\Teorion\Events\QueryAudited` — event dispatched after every `filterAndPaginate()` or `findFiltered()` call when audit is enabled
+- `Teoprayoga\Teorion\QueryFingerprint` — deterministic SHA-256 fingerprint service that normalizes request parameters (sorted keys, excluded pagination tokens)
+- `Teoprayoga\Teorion\QueryFingerprintResult` — readonly DTO: `hash`, `payload`, `algorithm`
+- New config block: `audit.enabled`, `audit.log`, `audit.log_channel`, `fingerprint.exclude_keys`
+- Audit record includes: `fingerprint`, `filter_class`, `model_class`, `terminal_mode`, `limit`, `result_count`, `duration_ms`, `user_id`
+- `findFiltered()` also emits audit with `terminal_mode = 'find'`
+
+#### Integration
+- `HasQueryFilterRules` includes validation rules for new `pagination` and `cursor` query params
+- `QueryFilterDocsExtractor` documents `pagination` and `cursor` params for Scribe auto-gen
+
+### Verified
+
+- 84 tests, 165+ assertions pass on Laravel 10–13 stacks
+- Audit disabled by default — zero overhead for v2.2.x installs
+
+### Breaking Changes
+
+None. All additions are opt-in via config flags.
+
+---
+
 ## [2.2.0] - 2026-06-03
 
 ### Added

@@ -70,6 +70,8 @@ trait HasQueryFilterRules
             'max_results'       => 'nullable|integer|min:1|max:100',
             'with_trashed'      => 'nullable|in:0,1,true,false',
             'only_trashed'      => 'nullable|in:0,1,true,false',
+            'pagination'        => 'nullable|string|in:cursor',
+            'cursor'            => 'nullable|string',
         ];
     }
 }

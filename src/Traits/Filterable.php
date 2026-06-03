@@ -2,12 +2,16 @@
 
 namespace Teoprayoga\Teorion\Traits;
 
+use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Teoprayoga\Teorion\Events\QueryAudited;
 use Teoprayoga\Teorion\Exceptions\QueryFilterNotFoundException;
+use Teoprayoga\Teorion\QueryFingerprint;
 use Teoprayoga\Teorion\QueryFilter;
 use Teoprayoga\Teorion\Terminal\PaginationTerminal;
 
@@ -47,11 +51,18 @@ trait Filterable
      *
      * Usage: Model::query()->filterAndPaginate($request)
      */
-    public function scopeFilterAndPaginate(Builder $query, Request $request): LengthAwarePaginator|Collection
+    public function scopeFilterAndPaginate(Builder $query, Request $request): LengthAwarePaginator|CursorPaginator|Collection
     {
-        $filtered = $this->newQueryFilter()->apply($query, $request);
+        $startedAt = microtime(true);
+        $filter    = $this->newQueryFilter();
+        $terminal  = new PaginationTerminal();
 
-        return (new PaginationTerminal())->execute($filtered, $request);
+        $filtered = $filter->apply($query, $request);
+        $result   = $terminal->execute($filtered, $request);
+
+        $this->auditFilteredQuery($filter, $query, $request, $terminal, $result, $startedAt);
+
+        return $result;
     }
 
     /**
@@ -62,11 +73,15 @@ trait Filterable
      */
     public static function findFiltered(Request $request, int|string $id): ?Model
     {
-        $instance = new static();
-        $filtered = $instance->newQueryFilter()->apply($instance->newQuery(), $request);
+        $instance  = new static();
+        $startedAt = microtime(true);
+        $filter    = $instance->newQueryFilter();
 
-        $key    = is_numeric($id) ? $instance->getKeyName() : 'uuid';
-        $result = $filtered->where($key, $id)->first();
+        $filtered = $filter->apply($instance->newQuery(), $request);
+        $key      = is_numeric($id) ? $instance->getKeyName() : 'uuid';
+        $result   = $filtered->where($key, $id)->first();
+
+        $instance->auditFindResult($filter, $instance->newQuery(), $request, $result, $startedAt);
 
         if ($result === null) {
             return null;
@@ -80,5 +95,83 @@ trait Filterable
         }
 
         return $result;
+    }
+
+    private function auditFilteredQuery(
+        QueryFilter $filter,
+        Builder $query,
+        Request $request,
+        PaginationTerminal $terminal,
+        LengthAwarePaginator|CursorPaginator|Collection $result,
+        float $startedAt,
+    ): void {
+        if (!config('teorion.audit.enabled', false)) {
+            return;
+        }
+
+        $fingerprint = (new QueryFingerprint())->make($filter, $query, $request);
+        $record      = [
+            'fingerprint'   => [
+                'hash'      => $fingerprint->hash,
+                'algorithm' => $fingerprint->algorithm,
+                'payload'   => $fingerprint->payload,
+            ],
+            'filter_class'  => $filter::class,
+            'model_class'   => $query->getModel()::class,
+            'terminal_mode' => $terminal->resolveMode($request),
+            'limit'         => $terminal->resolveLimit($request),
+            'result_count'  => $this->resultCount($result),
+            'duration_ms'   => round((microtime(true) - $startedAt) * 1000, 2),
+            'user_id'       => $request->user()?->getAuthIdentifier(),
+        ];
+
+        event(new QueryAudited($record));
+
+        if (config('teorion.audit.log', false)) {
+            Log::channel(config('teorion.audit.log_channel'))->info('teorion.query_audited', $record);
+        }
+    }
+
+    private function auditFindResult(
+        QueryFilter $filter,
+        Builder $query,
+        Request $request,
+        ?Model $result,
+        float $startedAt,
+    ): void {
+        if (!config('teorion.audit.enabled', false)) {
+            return;
+        }
+
+        $fingerprint = (new QueryFingerprint())->make($filter, $query, $request);
+        $record      = [
+            'fingerprint'   => [
+                'hash'      => $fingerprint->hash,
+                'algorithm' => $fingerprint->algorithm,
+                'payload'   => $fingerprint->payload,
+            ],
+            'filter_class'  => $filter::class,
+            'model_class'   => $query->getModel()::class,
+            'terminal_mode' => 'find',
+            'limit'         => 1,
+            'result_count'  => $result ? 1 : 0,
+            'duration_ms'   => round((microtime(true) - $startedAt) * 1000, 2),
+            'user_id'       => $request->user()?->getAuthIdentifier(),
+        ];
+
+        event(new QueryAudited($record));
+
+        if (config('teorion.audit.log', false)) {
+            Log::channel(config('teorion.audit.log_channel'))->info('teorion.query_audited', $record);
+        }
+    }
+
+    private function resultCount(LengthAwarePaginator|CursorPaginator|Collection $result): int
+    {
+        if ($result instanceof Collection) {
+            return $result->count();
+        }
+
+        return count($result->items());
     }
 }
