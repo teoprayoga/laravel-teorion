@@ -11,7 +11,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Teoprayoga\Teorion\Events\QueryAudited;
 use Teoprayoga\Teorion\Exceptions\QueryFilterNotFoundException;
+use Teoprayoga\Teorion\Pipeline\AuditedBuilder;
 use Teoprayoga\Teorion\QueryFingerprint;
+use Teoprayoga\Teorion\QueryFingerprintResult;
 use Teoprayoga\Teorion\QueryFilter;
 use Teoprayoga\Teorion\Terminal\PaginationTerminal;
 
@@ -43,6 +45,22 @@ trait Filterable
     public function scopeFilter(Builder $query, Request $request): Builder
     {
         return $this->newQueryFilter()->apply($query, $request);
+    }
+
+    /**
+     * Apply filters and return an audited Builder wrapper.
+     * Terminal methods (get, first, paginate, cursorPaginate, count)
+     * automatically emit QueryAudited events when audit is enabled.
+     *
+     * Usage: Post::query()->filterAudited($request)->where(...)->get()
+     */
+    public function scopeFilterAudited(Builder $query, Request $request): AuditedBuilder
+    {
+        $startedAt = microtime(true);
+        $filter    = $this->newQueryFilter();
+        $filtered  = $filter->apply($query, $request);
+
+        return new AuditedBuilder($filtered, $filter, $request, $startedAt);
     }
 
     /**
@@ -110,7 +128,12 @@ trait Filterable
         }
 
         $fingerprint = (new QueryFingerprint())->make($filter, $query, $request);
-        $record      = [
+
+        if (!$this->shouldAudit($fingerprint)) {
+            return;
+        }
+
+        $this->emitAudit([
             'fingerprint'   => [
                 'hash'      => $fingerprint->hash,
                 'algorithm' => $fingerprint->algorithm,
@@ -123,13 +146,7 @@ trait Filterable
             'result_count'  => $this->resultCount($result),
             'duration_ms'   => round((microtime(true) - $startedAt) * 1000, 2),
             'user_id'       => $request->user()?->getAuthIdentifier(),
-        ];
-
-        event(new QueryAudited($record));
-
-        if (config('teorion.audit.log', false)) {
-            Log::channel(config('teorion.audit.log_channel'))->info('teorion.query_audited', $record);
-        }
+        ]);
     }
 
     private function auditFindResult(
@@ -144,7 +161,12 @@ trait Filterable
         }
 
         $fingerprint = (new QueryFingerprint())->make($filter, $query, $request);
-        $record      = [
+
+        if (!$this->shouldAudit($fingerprint)) {
+            return;
+        }
+
+        $this->emitAudit([
             'fingerprint'   => [
                 'hash'      => $fingerprint->hash,
                 'algorithm' => $fingerprint->algorithm,
@@ -157,8 +179,32 @@ trait Filterable
             'result_count'  => $result ? 1 : 0,
             'duration_ms'   => round((microtime(true) - $startedAt) * 1000, 2),
             'user_id'       => $request->user()?->getAuthIdentifier(),
-        ];
+        ]);
+    }
 
+    /**
+     * Deterministic per-fingerprint sampling — same query intent always
+     * yields same audit decision (consistent with cache-key derivation).
+     * Caller must short-circuit on `audit.enabled` before calling this.
+     */
+    private function shouldAudit(QueryFingerprintResult $fingerprint): bool
+    {
+        $rate = (float) config('teorion.audit.sample_rate', 1.0);
+
+        if ($rate >= 1.0) {
+            return true;
+        }
+        if ($rate <= 0.0) {
+            return false;
+        }
+
+        $sample = hexdec(substr($fingerprint->hash, 0, 8)) / 0xFFFFFFFF;
+
+        return $sample <= $rate;
+    }
+
+    private function emitAudit(array $record): void
+    {
         event(new QueryAudited($record));
 
         if (config('teorion.audit.log', false)) {

@@ -4,6 +4,10 @@ namespace Teoprayoga\Teorion;
 
 use Illuminate\Support\ServiceProvider;
 use Teoprayoga\Teorion\Console\MakeQueryFilterCommand;
+use Teoprayoga\Teorion\Fingerprint\AlgorithmRegistry;
+use Teoprayoga\Teorion\Fingerprint\Sha256Algorithm;
+use Teoprayoga\Teorion\Fingerprint\Xxh128Algorithm;
+use Teoprayoga\Teorion\Fingerprint\Xxh3Algorithm;
 
 class TeorionServiceProvider extends ServiceProvider
 {
@@ -13,6 +17,10 @@ class TeorionServiceProvider extends ServiceProvider
             __DIR__ . '/../config/teorion.php',
             'teorion'
         );
+
+        AlgorithmRegistry::register(new Sha256Algorithm());
+        AlgorithmRegistry::register(new Xxh3Algorithm());
+        AlgorithmRegistry::register(new Xxh128Algorithm());
     }
 
     public function boot(): void

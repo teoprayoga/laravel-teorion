@@ -287,8 +287,10 @@ return [
         'enabled'     => env('TEORION_AUDIT_ENABLED', false),
         'log'         => env('TEORION_AUDIT_LOG', false),
         'log_channel' => env('TEORION_AUDIT_LOG_CHANNEL', null),
+        'sample_rate' => (float) env('TEORION_AUDIT_SAMPLE_RATE', 1.0),  // 0.0–1.0
     ],
     'fingerprint' => [
+        'algorithm'    => env('TEORION_FINGERPRINT_ALGORITHM', 'sha256'),  // sha256 | xxh3 | xxh128
         'exclude_keys' => ['_token', '_method', 'page', 'cursor', 'signature', 'expires'],
     ],
 ];
@@ -352,11 +354,48 @@ Customize excluded parameters (defaults exclude page/cursor/CSRF tokens):
 ],
 ```
 
-### Why SHA-256?
+### Fingerprint Algorithm Choice
 
-The default algorithm is SHA-256 because it's available without extensions, deterministic across PHP versions, and fast enough (<1µs for typical request payloads). Hash itself is rarely the bottleneck — `json_encode` and recursive `ksort` of the payload dominate.
+The default is `sha256` — available without extensions, deterministic across PHP versions, fast enough (<1µs for typical request payloads). Hash itself is rarely the bottleneck — `json_encode` and recursive `ksort` dominate.
 
-Switching algorithms isn't free: existing fingerprint values lose backward compatibility, so any cache derived from them must be invalidated. If you do need to switch, the `algorithm` field on `QueryFingerprintResult` lets you prefix cache keys explicitly: `"query:{$result->algorithm}:{$result->hash}"`.
+Three built-in algorithms (v2.4+):
+
+| Algorithm | Hash length | Speed (relative) | Notes |
+|-----------|------------|------------------|-------|
+| `sha256`  | 64 hex | 1× (baseline) | Default. Crypto-grade, but overkill for fingerprinting |
+| `xxh3`    | 16 hex | ~5–10× faster | PHP 8.1+ native via `hash()` |
+| `xxh128`  | 32 hex | ~3–5× faster | Collision-resistant alternative to xxh3 |
+
+Switch via config or env:
+
+```php
+'fingerprint' => ['algorithm' => 'xxh3'],
+// or: TEORION_FINGERPRINT_ALGORITHM=xxh3
+```
+
+Switching invalidates existing fingerprints — derive cache keys with the algorithm prefix to make rotation safe: `"query:{$result->algorithm}:{$result->hash}"`.
+
+Custom algorithms (e.g., blake3 via ext-blake3) can be registered in your `AppServiceProvider`:
+
+```php
+use Teoprayoga\Teorion\Fingerprint\AlgorithmInterface;
+use Teoprayoga\Teorion\Fingerprint\AlgorithmRegistry;
+
+AlgorithmRegistry::register(new class implements AlgorithmInterface {
+    public function name(): string { return 'blake3'; }
+    public function hash(string $payload): string { return hash('blake3', $payload); }
+});
+```
+
+### Sampling
+
+For production scale (10k+ req/min), full-rate audit can flood the event bus. Use `audit.sample_rate` (0.0–1.0):
+
+```env
+TEORION_AUDIT_SAMPLE_RATE=0.01   # audit 1% of queries
+```
+
+Sampling is **deterministic per fingerprint** — same query intent always produces the same audit decision (always-on or always-off). This is intentional: random sampling would break fingerprint-based cache dedup (same query might or might not be audited). Hash-based sampling keeps decisions consistent.
 
 ### Audit Boundaries
 
@@ -367,9 +406,15 @@ The audit hook is wired to these teorion terminal methods:
 | `filterAndPaginate()` | ✅ | `paginate` / `cursor` / `collection` |
 | `findFiltered()` | ✅ | `find` |
 | `scopeFilter()` (raw Builder) | ❌ | — |
+| `scopeFilterAudited()` (audited wrapper, v2.4+) | ✅ | `get` / `first` / `paginate` / `cursorPaginate` / `count` |
 | Direct Eloquent calls | ❌ | — |
 
-For audit on raw Builder chains (`Post::query()->filter($request)->where(...)->get()`), see the audited builder pattern (v2.4+).
+For audit on raw Builder chains, swap `filter()` → `filterAudited()`:
+
+```php
+Post::query()->filterAudited($request)->where('extra', $val)->get();
+// → QueryAudited dispatched with terminal_mode='get'
+```
 
 ### Listener Recipes
 
