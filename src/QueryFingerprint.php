@@ -4,6 +4,7 @@ namespace Teoprayoga\Teorion;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Teoprayoga\Teorion\Fingerprint\AlgorithmRegistry;
 
 class QueryFingerprint
 {
@@ -19,9 +20,10 @@ class QueryFingerprint
             'parameters'   => $this->normalizedParameters($request),
         ];
 
-        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $json      = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $algorithm = AlgorithmRegistry::get(config('teorion.fingerprint.algorithm', 'sha256'));
 
-        return new QueryFingerprintResult(hash('sha256', $json), $payload);
+        return new QueryFingerprintResult($algorithm->hash($json), $payload, $algorithm->name());
     }
 
     private function normalizedParameters(Request $request): array

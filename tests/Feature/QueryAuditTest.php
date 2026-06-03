@@ -76,6 +76,47 @@ class QueryAuditTest extends TestCase
         });
     }
 
+    public function test_sample_rate_zero_skips_all_audits(): void
+    {
+        config()->set('teorion.audit.enabled', true);
+        config()->set('teorion.audit.sample_rate', 0.0);
+        Event::fake();
+
+        Post::create(['uuid' => 'a', 'title' => 'A']);
+        Post::query()->filterAndPaginate(Request::create('/', 'GET'));
+
+        Event::assertNotDispatched(QueryAudited::class);
+    }
+
+    public function test_sample_rate_one_includes_all_audits(): void
+    {
+        config()->set('teorion.audit.enabled', true);
+        config()->set('teorion.audit.sample_rate', 1.0);
+        Event::fake();
+
+        Post::create(['uuid' => 'a', 'title' => 'A']);
+        Post::query()->filterAndPaginate(Request::create('/', 'GET'));
+
+        Event::assertDispatched(QueryAudited::class);
+    }
+
+    public function test_sample_rate_deterministic_per_fingerprint(): void
+    {
+        config()->set('teorion.audit.enabled', true);
+        config()->set('teorion.audit.sample_rate', 0.5);
+
+        Post::create(['uuid' => 'a', 'title' => 'A']);
+
+        $decisions = [];
+        for ($i = 0; $i < 10; $i++) {
+            Event::fake();
+            Post::query()->filterAndPaginate(Request::create('/', 'GET', ['status' => 'published']));
+            $decisions[] = empty(Event::dispatched(QueryAudited::class)) ? 'skip' : 'audit';
+        }
+
+        $this->assertCount(1, array_unique($decisions), 'Sample decision must be deterministic per fingerprint');
+    }
+
     public function test_audit_log_writes_structured_payload_when_enabled(): void
     {
         config()->set('teorion.audit.enabled', true);

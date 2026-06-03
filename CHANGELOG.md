@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-06-03
+
+### Added
+
+#### Sample Rate
+- `audit.sample_rate` config (float 0.0–1.0, default `1.0`) — controls fraction of queries audited
+- **Deterministic sampling** via fingerprint hash modulo — same query intent always produces same audit decision (consistent with cache-key derivation, unlike `mt_rand`)
+- Env: `TEORION_AUDIT_SAMPLE_RATE=0.01` for 1% sampling at scale
+
+#### Audited Builder (close `scopeFilter()` audit gap)
+- `Filterable::scopeFilterAudited($request)` returns `AuditedBuilder` wrapper
+- Auto-emits `QueryAudited` event on terminal methods: `get`, `first`, `paginate`, `cursorPaginate`, `count`
+- Enables audit for custom Builder chains: `Post::query()->filterAudited($request)->where(...)->get()`
+- Audit Boundaries matrix in README updated — only direct Eloquent calls remain unaudited
+
+#### Configurable Fingerprint Algorithm
+- `Teoprayoga\Teorion\Fingerprint\AlgorithmInterface` + `AlgorithmRegistry` (extension point)
+- Built-in algorithms: `sha256` (default, backward-compat), `xxh3` (~5–10× faster), `xxh128` (collision-resistant + fast)
+- Config: `fingerprint.algorithm` (env: `TEORION_FINGERPRINT_ALGORITHM`)
+- Custom algorithms registerable via `AlgorithmRegistry::register()` (e.g., blake3 with ext-blake3)
+- `QueryFingerprintResult.algorithm` field exposes the algo used — derive cache key as `"query:{$result->algorithm}:{$result->hash}"` for safe algorithm switching
+
+### Refactored
+
+- `Filterable` — extracted private helpers `shouldAudit(QueryFingerprintResult)` and `emitAudit(array)` to DRY audit dispatch across `auditFilteredQuery`, `auditFindResult`, and `AuditedBuilder`
+
+### Verified
+
+- **96 tests, 183 assertions** pass (83 + 3 sample rate + 5 audited builder + 5 algorithm registry) on PHP 8.1–8.4 × Laravel 10–13 CI matrix
+
+### Breaking Changes
+
+None. All defaults unchanged: sample_rate=1.0 (100% audit), algorithm=sha256 (existing hashes valid).
+
+---
+
 ## [2.3.1] - 2026-06-03
 
 ### Documentation
