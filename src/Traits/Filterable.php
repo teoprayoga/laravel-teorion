@@ -7,12 +7,28 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Teoprayoga\Teorion\Exceptions\QueryFilterNotFoundException;
 use Teoprayoga\Teorion\QueryFilter;
 use Teoprayoga\Teorion\Terminal\PaginationTerminal;
 
 trait Filterable
 {
-    abstract public function newQueryFilter(): QueryFilter;
+    public function newQueryFilter(): QueryFilter
+    {
+        if (property_exists($this, 'queryFilter') && isset($this->queryFilter)) {
+            return new $this->queryFilter();
+        }
+
+        $base      = class_basename(static::class);
+        $namespace = config('teorion.query_filters_namespace', 'App\\QueryFilters');
+        $class     = trim($namespace, '\\') . '\\' . $base . 'QueryFilter';
+
+        if (class_exists($class)) {
+            return new $class();
+        }
+
+        throw new QueryFilterNotFoundException(static::class, $class);
+    }
 
     /**
      * Apply all declared filters, scopes, withs, withCounts, and sorts.

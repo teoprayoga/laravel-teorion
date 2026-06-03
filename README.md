@@ -80,9 +80,36 @@ class PostQueryFilter extends QueryFilter
 
 ### 3. Add the Filterable trait to your model
 
+Three ways to bind a QueryFilter (pick one):
+
+**A. Convention (zero boilerplate)** — model `Post` auto-resolves to `App\QueryFilters\PostQueryFilter`:
+
+```php
+use Teoprayoga\Teorion\Traits\Filterable;
+
+class Post extends Model
+{
+    use Filterable;
+
+    // Existing scopeXxx() methods stay here — whitelist controls which are exposed.
+}
+```
+
+**B. Property override** — explicit, IDE-navigable:
+
+```php
+class Post extends Model
+{
+    use Filterable;
+
+    protected string $queryFilter = CustomPostQueryFilter::class;
+}
+```
+
+**C. Method override** — for dynamic resolution:
+
 ```php
 use Teoprayoga\Teorion\QueryFilter;
-use Teoprayoga\Teorion\Traits\Filterable;
 
 class Post extends Model
 {
@@ -92,9 +119,13 @@ class Post extends Model
     {
         return new PostQueryFilter();
     }
-
-    // Existing scopeXxx() methods stay here — whitelist controls which are exposed.
 }
+```
+
+Customize the convention namespace in `config/teorion.php`:
+
+```php
+'query_filters_namespace' => 'App\\Filters\\Query',
 ```
 
 ### 4. Use in your ViewModel/Controller
@@ -222,11 +253,12 @@ class GetRequest extends FormRequest
 
 ```php
 return [
-    'default_per_page' => 10,
-    'paginate_key'     => 'is_paginate',
-    'per_page_key'     => 'per_page',
-    'max_results_key'  => 'max_results',
-    'strict_mode'      => env('APP_DEBUG', false),
+    'default_per_page'        => 10,
+    'paginate_key'            => 'is_paginate',
+    'per_page_key'            => 'per_page',
+    'max_results_key'         => 'max_results',
+    'query_filters_namespace' => 'App\\QueryFilters',
+    'strict_mode'             => env('APP_DEBUG', false),
 ];
 ```
 

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-06-03
+
+### Added
+
+- Convention-based `newQueryFilter()` auto-resolve in `Filterable` trait — model `Post` automatically resolves to `App\QueryFilters\PostQueryFilter` without manual implementation
+- `$queryFilter` property override on models for explicit QueryFilter binding (`protected string $queryFilter = XxxQueryFilter::class`)
+- `config('teorion.query_filters_namespace')` — configurable namespace for convention resolution (default: `App\\QueryFilters`)
+- `QueryFilterNotFoundException` — thrown when neither property, method override, nor convention resolves a QueryFilter
+
+### Changed
+
+- `Filterable::newQueryFilter()` is no longer `abstract` — default implementation resolves by property → convention → exception
+- Existing models with explicit `newQueryFilter()` method override continue to work unchanged (method dispatch wins over trait default)
+
+### Breaking Changes
+
+None. All resolution paths are additive; existing v2.0.x code works without modification.
+
+---
+
 ## [2.0.0] - 2026-06-03
 
 ### Added
