@@ -352,6 +352,98 @@ Customize excluded parameters (defaults exclude page/cursor/CSRF tokens):
 ],
 ```
 
+### Why SHA-256?
+
+The default algorithm is SHA-256 because it's available without extensions, deterministic across PHP versions, and fast enough (<1µs for typical request payloads). Hash itself is rarely the bottleneck — `json_encode` and recursive `ksort` of the payload dominate.
+
+Switching algorithms isn't free: existing fingerprint values lose backward compatibility, so any cache derived from them must be invalidated. If you do need to switch, the `algorithm` field on `QueryFingerprintResult` lets you prefix cache keys explicitly: `"query:{$result->algorithm}:{$result->hash}"`.
+
+### Audit Boundaries
+
+The audit hook is wired to these teorion terminal methods:
+
+| Terminal | Audited? | `terminal_mode` |
+|----------|----------|-----------------|
+| `filterAndPaginate()` | ✅ | `paginate` / `cursor` / `collection` |
+| `findFiltered()` | ✅ | `find` |
+| `scopeFilter()` (raw Builder) | ❌ | — |
+| Direct Eloquent calls | ❌ | — |
+
+For audit on raw Builder chains (`Post::query()->filter($request)->where(...)->get()`), see the audited builder pattern (v2.4+).
+
+### Listener Recipes
+
+The package emits events; you decide persistence and side effects. Five patterns:
+
+**1. Persist to database** — your own audit log table:
+
+```php
+class PersistQueryAudit
+{
+    public function handle(QueryAudited $event): void
+    {
+        QueryAuditLog::create([
+            'fingerprint_hash' => $event->record['fingerprint']['hash'],
+            'filter_class'     => $event->record['filter_class'],
+            'duration_ms'      => $event->record['duration_ms'],
+            'user_id'          => $event->record['user_id'],
+            'recorded_at'      => now(),
+        ]);
+    }
+}
+```
+
+**2. Slack alert on slow queries (>500ms):**
+
+```php
+Event::listen(QueryAudited::class, function (QueryAudited $event) {
+    if ($event->record['duration_ms'] > 500) {
+        Notification::route('slack', config('alerts.slack_webhook'))
+            ->notify(new SlowQueryAlert($event->record));
+    }
+});
+```
+
+**3. Redis dedup cache (memoize identical queries):**
+
+```php
+Event::listen(QueryAudited::class, function (QueryAudited $event) {
+    $key = 'query:' . $event->record['fingerprint']['hash'];
+    Redis::setex($key, 60, json_encode($event->record));
+});
+```
+
+**4. N+1 detection within request:**
+
+```php
+Event::listen(QueryAudited::class, function (QueryAudited $event) {
+    static $seen = [];
+    $hash = $event->record['fingerprint']['hash'];
+    $seen[$hash] = ($seen[$hash] ?? 0) + 1;
+    if ($seen[$hash] > 3) {
+        Log::warning('Suspected N+1 — same query repeated', [
+            'hash'  => $hash,
+            'count' => $seen[$hash],
+            'class' => $event->record['filter_class'],
+        ]);
+    }
+});
+```
+
+**5. Sentry breadcrumb (low-overhead observability):**
+
+```php
+Event::listen(QueryAudited::class, function (QueryAudited $event) {
+    \Sentry\addBreadcrumb(new \Sentry\Breadcrumb(
+        level: 'info',
+        type: 'query',
+        category: 'teorion',
+        message: "Query: {$event->record['filter_class']}",
+        metadata: ['duration_ms' => $event->record['duration_ms']],
+    ));
+});
+```
+
 ## Testing
 
 ```bash
