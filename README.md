@@ -1,5 +1,10 @@
 # Laravel Teorion
 
+[![Tests](https://github.com/teoprayoga/laravel-teorion/actions/workflows/tests.yml/badge.svg)](https://github.com/teoprayoga/laravel-teorion/actions/workflows/tests.yml)
+[![Latest Stable Version](https://img.shields.io/packagist/v/teoprayoga/laravel-teorion.svg)](https://packagist.org/packages/teoprayoga/laravel-teorion)
+[![Total Downloads](https://img.shields.io/packagist/dt/teoprayoga/laravel-teorion.svg)](https://packagist.org/packages/teoprayoga/laravel-teorion)
+[![License](https://img.shields.io/packagist/l/teoprayoga/laravel-teorion.svg)](https://packagist.org/packages/teoprayoga/laravel-teorion)
+
 Request-driven query filter package for Laravel — a formalized, secure replacement for ad-hoc query scope traits, with whitelist enforcement, isolated scope parameters, and single-call ViewModel integration.
 
 ## Features
@@ -16,6 +21,18 @@ Request-driven query filter package for Laravel — a formalized, secure replace
 - 🧰 **Macro system** — register custom global filter types via `FilterMacroRegistry`
 - 📖 **Scribe integration** — auto-generate API docs from `#[UsesQueryFilter]` attribute
 - ✅ **Validation rule generator** — `HasQueryFilterRules` trait auto-generates FormRequest rules
+
+## Requirements
+
+- **PHP** 8.1+
+- **Laravel** 10, 11, 12, or 13
+
+| PHP Version | Laravel 10 | Laravel 11 | Laravel 12 | Laravel 13 |
+|:------------|:----------:|:----------:|:----------:|:----------:|
+| 8.1         | ✅          | —          | —          | —          |
+| 8.2         | ✅          | ✅          | ✅          | —          |
+| 8.3         | ✅          | ✅          | ✅          | ✅          |
+| 8.4         | —          | ✅          | ✅          | ✅          |
 
 ## Installation
 
