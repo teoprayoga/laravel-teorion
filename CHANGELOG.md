@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-06-03
+
+### Documentation
+
+- README: "Why SHA-256?" rationale for default fingerprint algorithm
+- README: "Audit Boundaries" matrix — explicit table of which terminals are audited
+- README: "Listener Recipes" — 5 listener patterns (DB persist, Slack alert, Redis dedup, N+1 detection, Sentry breadcrumb)
+
+### No Code Changes
+
+This is a documentation-only patch release. v2.3.0 consumers can upgrade safely without testing.
+
+---
+
 ## [2.3.0] - 2026-06-03
 
 ### Added
