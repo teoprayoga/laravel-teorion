@@ -17,6 +17,8 @@ Request-driven query filter package for Laravel — a formalized, secure replace
 - 📑 **Dual sort format** — Spatie-style `?sort=-col,col2` AND legacy `?order_by=...&order_direction=...`
 - 🗑️ **Auto soft delete handling** — `?with_trashed=1`, `?only_trashed=1` work automatically on SoftDeletes models
 - 📊 **Aggregation support** — `withCount`, `withSum`, `withAvg`, `withMax`, `withMin` via `withAggregates[]`
+- 📜 **Cursor pagination** — switch to cursor-based paging via `?pagination=cursor` for large datasets / infinite scroll
+- 🔍 **Query audit & fingerprint** — deterministic SHA-256 fingerprint + `QueryAudited` event for observability, cache key derivation, and N+1 detection
 - 🛠 **Fluent filter API** — `.alias()`, `.default()`, `.required()` chainable
 - 🧰 **Macro system** — register custom global filter types via `FilterMacroRegistry`
 - 📖 **Scribe integration** — auto-generate API docs from `#[UsesQueryFilter]` attribute
@@ -175,6 +177,8 @@ public function show(GetRequest $request, string $uuid): mixed
 | `sort` | `?sort=-created_at,title` | Spatie-style sort, multi-column |
 | `order_by` / `order_direction` | `?order_by=created_at&order_direction=desc` | Legacy single-sort |
 | `is_paginate` | `?is_paginate=1&per_page=20` | Paginate vs get |
+| `pagination` | `?pagination=cursor&per_page=20` | Cursor pagination mode (returns `CursorPaginator`) |
+| `cursor` | `?cursor=eyJpZCI6MTB9` | Cursor token from previous response |
 | `with_trashed` | `?with_trashed=1` | Auto-detected on SoftDeletes models |
 | `only_trashed` | `?only_trashed=1` | Soft-deleted only |
 | `visibles[]` / `hiddens[]` | `?hiddens[]=password` | makeVisible / makeHidden on result |
@@ -270,17 +274,83 @@ class GetRequest extends FormRequest
 
 ```php
 return [
-    'default_per_page'        => 10,
-    'paginate_key'            => 'is_paginate',
-    'per_page_key'            => 'per_page',
-    'max_results_key'         => 'max_results',
-    'query_filters_namespace' => 'App\\QueryFilters',
-    'strict_mode'             => env('APP_DEBUG', false),
+    'default_per_page'         => 10,
+    'paginate_key'             => 'is_paginate',
+    'per_page_key'             => 'per_page',
+    'max_results_key'          => 'max_results',
+    'pagination_mode_key'      => 'pagination',
+    'cursor_pagination_value'  => 'cursor',
+    'cursor_name'              => 'cursor',
+    'query_filters_namespace'  => 'App\\QueryFilters',
+    'strict_mode'              => env('APP_DEBUG', false),
+    'audit' => [
+        'enabled'     => env('TEORION_AUDIT_ENABLED', false),
+        'log'         => env('TEORION_AUDIT_LOG', false),
+        'log_channel' => env('TEORION_AUDIT_LOG_CHANNEL', null),
+    ],
+    'fingerprint' => [
+        'exclude_keys' => ['_token', '_method', 'page', 'cursor', 'signature', 'expires'],
+    ],
 ];
 ```
 
 - `strict_mode=true` → throws `DisallowedScopeException` / `DisallowedWithException` / `ScopeMethodNotFoundException` on unlisted requests
 - `strict_mode=false` → silently skips disallowed values (production-safe default)
+
+## Cursor Pagination
+
+For large datasets or infinite-scroll UIs, switch from offset to cursor pagination:
+
+```
+GET /posts?pagination=cursor&per_page=20
+```
+
+The response is a `CursorPaginator` exposing `next_cursor` / `prev_cursor` tokens. Pass via `?cursor=<token>` to navigate.
+
+```php
+// Filterable::scopeFilterAndPaginate return type
+LengthAwarePaginator|CursorPaginator|Collection
+```
+
+Cursor pagination requires a deterministic `orderBy` clause — set one via `$defaultSort` in your `QueryFilter` (e.g., `protected array $defaultSort = ['-id'];`).
+
+## Query Audit & Fingerprint
+
+Enable structured audit for every `filterAndPaginate()` and `findFiltered()` call:
+
+```env
+TEORION_AUDIT_ENABLED=true
+TEORION_AUDIT_LOG=true
+TEORION_AUDIT_LOG_CHANNEL=stack
+```
+
+Listen for the event:
+
+```php
+use Teoprayoga\Teorion\Events\QueryAudited;
+
+Event::listen(QueryAudited::class, function (QueryAudited $event) {
+    // $event->record:
+    //   fingerprint: ['hash', 'algorithm', 'payload']
+    //   filter_class, model_class
+    //   terminal_mode: 'paginate' | 'cursor' | 'collection' | 'find'
+    //   limit, result_count, duration_ms, user_id
+});
+```
+
+The **fingerprint** is a deterministic SHA-256 hash of `{filter_class, model_class, table, connection, normalized_parameters}`. Parameters are recursively `ksort`-normalized so order doesn't change the hash. Useful for:
+
+- **Cache key derivation** — same intent → same hash → same cache entry
+- **N+1 detection** — duplicate hashes within one request indicate suspicious repetition
+- **Query analytics** — group slow queries by fingerprint to find optimization targets
+
+Customize excluded parameters (defaults exclude page/cursor/CSRF tokens):
+
+```php
+'fingerprint' => [
+    'exclude_keys' => ['_token', '_method', 'page', 'cursor', 'signature', 'expires', 'your_custom_key'],
+],
+```
 
 ## Testing
 

@@ -124,6 +124,26 @@ class QueryFilterDocsExtractor
             'enumValues'  => [],
         ];
 
+        $params['pagination'] = [
+            'name'        => 'pagination',
+            'type'        => 'string',
+            'description' => "Pagination mode. Set to 'cursor' for cursor-based pagination instead of offset paging.",
+            'required'    => false,
+            'example'     => null,
+            'nullable'    => true,
+            'enumValues'  => ['cursor'],
+        ];
+
+        $params['cursor'] = [
+            'name'        => 'cursor',
+            'type'        => 'string',
+            'description' => 'Cursor token from previous response (used when pagination=cursor).',
+            'required'    => false,
+            'example'     => null,
+            'nullable'    => true,
+            'enumValues'  => [],
+        ];
+
         return $params;
     }
 
