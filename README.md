@@ -495,6 +495,16 @@ Event::listen(QueryAudited::class, function (QueryAudited $event) {
 composer test
 ```
 
+## Support
+
+If this package saves you time, consider supporting its development 🙏
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/teoprayoga)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Buy%20me%20a%20coffee-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/teoprayoga)
+[![Saweria](https://img.shields.io/badge/Saweria-Dukung-FAAB00?logoColor=white)](https://saweria.co/teoprayoga)
+
+Maintained by **Teo Prayoga** ([@teoprayoga](https://github.com/teoprayoga)).
+
 ## License
 
 MIT
